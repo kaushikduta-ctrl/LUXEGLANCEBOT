@@ -1,19 +1,19 @@
 # ============================================
 # LUXEGLANCEBOT - Complete Production Code
-# Multi-Channel Support | Railway Ready
+# Python 3.13 Compatible | No feedparser
 # ============================================
 
 import asyncio
 import logging
 import random
 import os
-import feedparser
 import requests
 from datetime import datetime
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
 from flask import Flask
 from threading import Thread
+from bs4 import BeautifulSoup
 
 # ============================================
 # CONFIGURATION
@@ -94,14 +94,6 @@ FALLBACK_CONTENT = [
     }
 ]
 
-# RSS Feeds (Real luxury news sources)
-RSS_FEEDS = [
-    'https://www.vogue.com/feed/rss',
-    'https://www.harpersbazaar.com/feeds/',
-    'https://www.elle.com/feeds/',
-    'https://www.wwd.com/feed/',
-]
-
 # Store active chats (channels/groups that have started the bot)
 active_chats = set()
 
@@ -139,14 +131,35 @@ def run_flask():
 # ============================================
 
 def get_luxury_news_from_rss():
-    """Fetch real news from luxury RSS feeds"""
-    try:
-        feed = feedparser.parse(random.choice(RSS_FEEDS))
-        if feed.entries:
-            entry = random.choice(feed.entries[:5])  # Get latest 5
-            return entry.title, entry.link
-    except Exception as e:
-        logger.error(f"RSS fetch failed: {e}")
+    """Fetch real news from luxury RSS feeds using requests + BeautifulSoup"""
+    rss_urls = [
+        'https://www.vogue.com/feed/rss',
+        'https://www.harpersbazaar.com/feeds/',
+        'https://www.elle.com/feeds/',
+    ]
+    
+    for url in random.sample(rss_urls, len(rss_urls)):
+        try:
+            response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+            response.raise_for_status()
+            
+            # Parse RSS XML manually
+            soup = BeautifulSoup(response.content, 'xml')
+            items = soup.find_all('item')[:5]
+            
+            if items:
+                item = random.choice(items)
+                title = item.find('title').text if item.find('title') else None
+                link = item.find('link').text if item.find('link') else None
+                
+                if title:
+                    logger.info(f"✅ RSS fetched: {title[:50]}...")
+                    return title, link
+                    
+        except Exception as e:
+            logger.error(f"RSS fetch failed for {url}: {e}")
+            continue
+    
     return None, None
 
 def get_luxury_image(keyword):
@@ -166,7 +179,6 @@ def get_luxury_image(keyword):
         data = response.json()
         
         if data.get('results'):
-            # Pick a random image from results
             image = random.choice(data['results'])
             return image['urls']['regular'], image.get('alt_description', 'Luxury beauty')
     except Exception as e:
@@ -217,7 +229,6 @@ def create_post_content():
         review = fallback['review']
         image_url = None
     else:
-        # Generate review based on news
         review = generate_review(news_title)
     
     return {
@@ -235,7 +246,6 @@ async def send_post_to_all():
     
     content = create_post_content()
     
-    # Format the message
     message = (
         f"✨ *{content['news']}* ✨\n\n"
         f"{content['review']}\n\n"
@@ -243,7 +253,6 @@ async def send_post_to_all():
         f"_Powered by real luxury sources_"
     )
     
-    # Send to each active chat
     bot = Bot(token=TOKEN)
     success_count = 0
     
@@ -251,7 +260,6 @@ async def send_post_to_all():
         try:
             if content['image_url']:
                 try:
-                    # Download image
                     response = requests.get(content['image_url'], timeout=15)
                     await bot.send_photo(
                         chat_id=chat_id,
@@ -261,14 +269,12 @@ async def send_post_to_all():
                     )
                 except Exception as e:
                     logger.error(f"Image send failed for {chat_id}: {e}")
-                    # Send text only
                     await bot.send_message(
                         chat_id=chat_id,
                         text=message,
                         parse_mode='Markdown'
                     )
             else:
-                # Send text only if no image
                 await bot.send_message(
                     chat_id=chat_id,
                     text=message,
@@ -278,7 +284,6 @@ async def send_post_to_all():
             logger.info(f"✅ Post sent to {chat_id}")
             
         except Exception as e:
-            # If bot is removed or blocked, remove from active chats
             if "Bot was blocked by the user" in str(e) or "Chat not found" in str(e):
                 active_chats.discard(chat_id)
                 logger.warning(f"Removed inactive chat: {chat_id}")
@@ -297,11 +302,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     chat_type = update.effective_chat.type
     
-    # Add to active chats
     active_chats.add(chat_id)
     logger.info(f"New chat added: {chat_id} (type: {chat_type})")
     
-    # Check if it's a group or channel
     if chat_type in ['group', 'supergroup', 'channel']:
         welcome_msg = (
             "💎 *LuxeGlanceBot is now active in this group/channel!* ✨\n\n"
@@ -366,7 +369,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     if query.data == 'latest':
-        # Send latest post immediately to this chat
         chat_id = query.message.chat_id
         active_chats.add(chat_id)
         await send_post_to_chat(chat_id)
@@ -430,7 +432,6 @@ async def send_post_to_chat(chat_id):
     bot = Bot(token=TOKEN)
     content = create_post_content()
     
-    # Format the message
     message = (
         f"✨ *{content['news']}* ✨\n\n"
         f"{content['review']}\n\n"
@@ -474,11 +475,11 @@ async def post_loop():
     
     while True:
         try:
-            await asyncio.sleep(180)  # Wait 3 minutes
+            await asyncio.sleep(180)
             await send_post_to_all()
         except Exception as e:
             logger.error(f"Loop error: {e}")
-            await asyncio.sleep(60)  # Wait 1 min on error
+            await asyncio.sleep(60)
 
 # ============================================
 # MAIN APPLICATION
@@ -487,25 +488,20 @@ async def post_loop():
 def main():
     """Start both Flask (web) and Telegram bot"""
     
-    # Start Flask thread (keeps Railway alive)
     flask_thread = Thread(target=run_flask, daemon=True)
     flask_thread.start()
     logger.info("🌐 Flask server started")
     
-    # Create Telegram Application
     application = Application.builder().token(TOKEN).build()
     
-    # Add handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("settings", settings))
     application.add_handler(CallbackQueryHandler(button_callback))
     
-    # Start posting loop in background
     loop = asyncio.get_event_loop()
     loop.create_task(post_loop())
     logger.info("🚀 Posting loop started")
     
-    # Run bot
     logger.info("🤖 LuxeGlanceBot is running...")
     logger.info("📊 Ready for multiple channels/groups!")
     application.run_polling(allowed_updates=['message', 'callback_query'])
