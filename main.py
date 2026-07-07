@@ -1,6 +1,6 @@
 # ============================================
 # LUXEGLANCEBOT - Complete Production Code
-# Python 3.13 Compatible | No lxml
+# Python 3.13 Compatible | PTB v21.x
 # ============================================
 
 import asyncio
@@ -143,14 +143,10 @@ def get_luxury_news_from_rss():
             response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
             response.raise_for_status()
             
-            # Use html.parser (built-in, no lxml needed)
             soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Find all item tags
             items = soup.find_all('item')
             
             if items:
-                # Get first 5 items
                 items = items[:5]
                 item = random.choice(items)
                 
@@ -220,17 +216,14 @@ def generate_review(news_title):
 def create_post_content():
     """Create a complete post with news, image, and review"""
     
-    # Try to get real news from RSS
     news_title, news_link = get_luxury_news_from_rss()
     
-    # Try to get image from Unsplash
     keyword = random.choice(['luxury fashion', 'diamond ring', 'rose bouquet', 
                             'designer handbag', 'couture dress', 'luxury watch',
                             'gold jewelry', 'silk scarf', 'high jewelry', 
                             'luxury perfume', 'designer shoes', 'evening gown'])
     image_url, image_desc = get_luxury_image(keyword)
     
-    # Fallback to manual content if APIs fail
     if not news_title or not image_url:
         fallback = random.choice(FALLBACK_CONTENT)
         news_title = fallback['news']
@@ -500,18 +493,24 @@ def main():
     flask_thread.start()
     logger.info("🌐 Flask server started")
     
+    # Build application
     application = Application.builder().token(TOKEN).build()
     
+    # Add handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("settings", settings))
     application.add_handler(CallbackQueryHandler(button_callback))
     
-    loop = asyncio.get_event_loop()
+    # Start the posting loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     loop.create_task(post_loop())
     logger.info("🚀 Posting loop started")
     
     logger.info("🤖 LuxeGlanceBot is running...")
     logger.info("📊 Ready for multiple channels/groups!")
+    
+    # Start polling (this blocks)
     application.run_polling(allowed_updates=['message', 'callback_query'])
 
 if __name__ == "__main__":
