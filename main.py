@@ -1,6 +1,6 @@
 # ============================================
 # LUXEGLANCEBOT - Complete Production Code
-# Python 3.13 Compatible | No feedparser
+# Python 3.13 Compatible | No lxml
 # ============================================
 
 import asyncio
@@ -131,7 +131,7 @@ def run_flask():
 # ============================================
 
 def get_luxury_news_from_rss():
-    """Fetch real news from luxury RSS feeds using requests + BeautifulSoup"""
+    """Fetch real news from luxury RSS feeds using BeautifulSoup with html.parser"""
     rss_urls = [
         'https://www.vogue.com/feed/rss',
         'https://www.harpersbazaar.com/feeds/',
@@ -143,14 +143,22 @@ def get_luxury_news_from_rss():
             response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
             response.raise_for_status()
             
-            # Parse RSS XML manually
-            soup = BeautifulSoup(response.content, 'xml')
-            items = soup.find_all('item')[:5]
+            # Use html.parser (built-in, no lxml needed)
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Find all item tags
+            items = soup.find_all('item')
             
             if items:
+                # Get first 5 items
+                items = items[:5]
                 item = random.choice(items)
-                title = item.find('title').text if item.find('title') else None
-                link = item.find('link').text if item.find('link') else None
+                
+                title_tag = item.find('title')
+                link_tag = item.find('link')
+                
+                title = title_tag.text if title_tag else None
+                link = link_tag.text if link_tag else None
                 
                 if title:
                     logger.info(f"✅ RSS fetched: {title[:50]}...")
